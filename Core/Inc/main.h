@@ -63,7 +63,13 @@ extern "C" {
 ///* Size of Transmission buffer */
 #define TXBUFFERSIZE                      (COUNTOF(aTxBuffer) - 1)
 /* Size of Reception buffer */
-#define RXBUFFERSIZE					TXBUFFERSIZE
+#define RXBUFFERSIZE					16
+
+// GPS Message buffer definitions
+#define PROCESS_COUNTER 15
+#define PROCESS_RX_BUFFER_SIZE 600
+#define PROCESS_PARSER_BUFFER_SIZE 600
+static char current_parser_buf[ PROCESS_PARSER_BUFFER_SIZE ];
 
 
 /* USER CODE END EC */

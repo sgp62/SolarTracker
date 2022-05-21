@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include <stdio.h>
+#include <string.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -51,7 +52,7 @@ __IO uint32_t VirtualUserButtonStatus = 0;  /* set to 1 after User set a button 
 uint8_t aTxBuffer[] = " **** UART_TwoBoards_ComPolling ****  **** UART_TwoBoards_ComPolling ****  **** UART_TwoBoards_ComPolling **** ";
 
 /* Buffer used for reception */
-uint8_t aRxBuffer[RXBUFFERSIZE];
+uint8_t aRxBuffer[PROCESS_RX_BUFFER_SIZE];
 
 /*
 Notes :
@@ -94,7 +95,8 @@ int _write(int file, char *ptr, int len)
 	return len;
 
 }
-/* USER CODE END 0 */
+
+
 
 /**
   * @brief  The application entry point.
@@ -156,12 +158,23 @@ int main(void)
 //	for(int i = 0; i < RXBUFFERSIZE; i++){
 //		printf("%d",aRxBuffer[i]);
 //	}
-
-	/*##-2- Put UART peripheral in reception process ###########################*/
-	if(HAL_UART_Receive(&UartHandle, (uint8_t *)aRxBuffer, RXBUFFERSIZE, 0x1FFFFFF) != HAL_OK)
-	{
-	Error_Handler();
+	int end_flag = 0;
+	int uart_counter = 0;
+	while(~end_flag){
+		//Receive one byte at a time until we reach carriage return (end of NMEA message)
+		if(HAL_UART_Receive(&UartHandle, (uint8_t *)(aRxBuffer+uart_counter), 1, 0x1FFFFFF) != HAL_OK)
+		{
+		Error_Handler();
+		}
+		if(aRxBuffer[uart_counter++] == 13){//Found carriage return, exit
+			end_flag = 1;
+		}
 	}
+//	/*##-2- Put UART peripheral in reception process ###########################*/
+//	if(HAL_UART_Receive(&UartHandle, (uint8_t *)aRxBuffer, RXBUFFERSIZE, 0x1FFFFFF) != HAL_OK)
+//	{
+//	Error_Handler();
+//	}
 	printf("Done Receive\n");
 
 	for(int i = 0; i < RXBUFFERSIZE; i++){
