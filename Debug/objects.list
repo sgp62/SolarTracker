@@ -1,3 +1,4 @@
+"./Core/Inc/nmea.o"
 "./Core/Src/gps3.o"
 "./Core/Src/gps3_ex.o"
 "./Core/Src/main.o"

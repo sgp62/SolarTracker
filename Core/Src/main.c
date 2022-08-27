@@ -18,12 +18,10 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include <stdio.h>
-#include <string.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "nmea.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -80,23 +78,8 @@ static void MX_USART1_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-int _write(int file, char *ptr, int len)
-
-{
-
-	/* Implement your write code here, this is used by puts and printf for example */
-
-	int i=0;
-
-	for(i=0 ; i<len ; i++)
-
-	ITM_SendChar((*ptr++));
-
-	return len;
-
-}
-
-
+nmea_t gps;
+/* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
@@ -126,43 +109,60 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_USART1_UART_Init();
+  MX_USART1_UART_Init(); //Possibly initiating USART twice???
   /* USER CODE BEGIN 2 */
   /*##-1- Configure the UART peripheral ######################################*/
 	/* Put the USART peripheral in the Asynchronous mode (UART Mode) */
-	/* UART configured as follows:
-		- Word Length = 8 Bits
-		- Stop Bit = One Stop bit
-		- Parity = None
-		- BaudRate = 9600 baud
-		- Hardware flow control disabled (RTS and CTS signals) */
-	UartHandle.Instance        = USARTx;
+//	/* UART configured as follows:
+//		- Word Length = 8 Bits
+//		- Stop Bit = One Stop bit
+//		- Parity = None
+//		- BaudRate = 9600 baud
+//		- Hardware flow control disabled (RTS and CTS signals) */
+//	UartHandle.Instance        = USART1;
+//
+//	UartHandle.Init.BaudRate     = 9600;
+//	UartHandle.Init.WordLength   = UART_WORDLENGTH_8B;
+//	UartHandle.Init.StopBits     = UART_STOPBITS_1;
+//	UartHandle.Init.Parity       = UART_PARITY_NONE;
+//	UartHandle.Init.HwFlowCtl    = UART_HWCONTROL_NONE;
+//	UartHandle.Init.Mode         = UART_MODE_TX_RX;
+//	UartHandle.Init.OverSampling = UART_OVERSAMPLING_16;
 
-	UartHandle.Init.BaudRate     = 9600;
-	UartHandle.Init.WordLength   = UART_WORDLENGTH_8B;
-	UartHandle.Init.StopBits     = UART_STOPBITS_1;
-	UartHandle.Init.Parity       = UART_PARITY_NONE;
-	UartHandle.Init.HwFlowCtl    = UART_HWCONTROL_NONE;
-	UartHandle.Init.Mode         = UART_MODE_TX_RX;
-	UartHandle.Init.OverSampling = UART_OVERSAMPLING_16;
-
-	if(HAL_UART_DeInit(&UartHandle) != HAL_OK)
-	{
-	  Error_Handler();
-	}
-	if(HAL_UART_Init(&UartHandle) != HAL_OK)
-	{
-	  Error_Handler();
-	}
-	printf("Starting Receive\n");
-//	for(int i = 0; i < RXBUFFERSIZE; i++){
-//		printf("%d",aRxBuffer[i]);
+//	if(HAL_UART_DeInit(&huart1) != HAL_OK)
+//	{
+//	  Error_Handler();
 //	}
+//	if(HAL_UART_Init(&huart1) != HAL_OK)
+//	{
+//	  Error_Handler();
+//	}
+
+//	//NMEA library example
+//	uint8_t got_one = 0;
+//	nmea_init(&gps, USART1, 1024);
+//	while(~got_one)
+//	{
+//		uint8_t time_h;
+//		printf("Starting Receive\n");
+//		nmea_loop(&gps);
+//	    if (nmea_available(&gps))
+//	    {
+//	      nmea_gnss_time_h(&gps, &time_h);
+//	      nmea_available_reset(&gps);
+//	      got_one = 1;
+//	    }
+//	}
+
+
+	for(int i = 0; i < RXBUFFERSIZE; i++){
+		printf("%d",aRxBuffer[i]);
+	}
 	int end_flag = 0;
 	int uart_counter = 0;
 	while(~end_flag){
 		//Receive one byte at a time until we reach carriage return (end of NMEA message)
-		if(HAL_UART_Receive(&UartHandle, (uint8_t *)(aRxBuffer+uart_counter), 1, 0x1FFFFFF) != HAL_OK)
+		if(HAL_UART_Receive(&huart1, (uint8_t *)(aRxBuffer+uart_counter), 1, 0x1FFFFFF) != HAL_OK)
 		{
 		Error_Handler();
 		}
@@ -170,16 +170,17 @@ int main(void)
 			end_flag = 1;
 		}
 	}
+
 //	/*##-2- Put UART peripheral in reception process ###########################*/
 //	if(HAL_UART_Receive(&UartHandle, (uint8_t *)aRxBuffer, RXBUFFERSIZE, 0x1FFFFFF) != HAL_OK)
 //	{
 //	Error_Handler();
 //	}
-	printf("Done Receive\n");
-
-	for(int i = 0; i < RXBUFFERSIZE; i++){
-		printf("%d",aRxBuffer[i]);
-	}
+//	printf("Done Receive\n");
+//
+//	for(int i = 0; i < RXBUFFERSIZE; i++){
+//		printf("%d",aRxBuffer[i]);
+//	}
 
 
 //	/*##-3- Start the transmission process #####################################*/
@@ -189,12 +190,12 @@ int main(void)
 //	{
 //	Error_Handler();
 //	}
-
-	/*##-4- Compare the sent and received buffers ##############################*/
-	if(Buffercmp((uint8_t*)aTxBuffer,(uint8_t*)aRxBuffer,RXBUFFERSIZE))
-	{
-	Error_Handler();
-	}
+//
+//	/*##-4- Compare the sent and received buffers ##############################*/
+//	if(Buffercmp((uint8_t*)aTxBuffer,(uint8_t*)aRxBuffer,RXBUFFERSIZE))
+//	{
+//	Error_Handler();
+//	}
 
 	/* Turn on LED3 if test passes then enter infinite loop */
 //	BSP_LED_On(LED3);
@@ -271,7 +272,7 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
+  huart1.Init.BaudRate = 9600;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;
