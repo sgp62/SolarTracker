@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -31,6 +32,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -41,6 +43,7 @@
 /* Private variables ---------------------------------------------------------*/
  UART_HandleTypeDef huart1;
 
+osThreadId defaultTaskHandle;
 /* USER CODE BEGIN PV */
 /* UART handler declaration */
 UART_HandleTypeDef UartHandle;
@@ -72,13 +75,15 @@ static uint16_t Buffercmp(uint8_t* pBuffer1, uint8_t* pBuffer2, uint16_t BufferL
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
+void StartDefaultTask(void const * argument);
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-nmea_t gps;
+QueueHandle_t xQueueSerialDataReceived;
 /* USER CODE END 0 */
 
 /**
@@ -109,98 +114,49 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_USART1_UART_Init(); //Possibly initiating USART twice???
+  MX_USART1_UART_Init();
+  HAL_NVIC_SetPriority(USART_GPS_IRQn, 1, 0);
+  HAL_NVIC_EnableIRQ(USART_GPS_IRQn);
+  USART_GPS->CR1 |= USART_CR1_RXNEIE; // Enable Interrupt
   /* USER CODE BEGIN 2 */
-  /*##-1- Configure the UART peripheral ######################################*/
-	/* Put the USART peripheral in the Asynchronous mode (UART Mode) */
-//	/* UART configured as follows:
-//		- Word Length = 8 Bits
-//		- Stop Bit = One Stop bit
-//		- Parity = None
-//		- BaudRate = 9600 baud
-//		- Hardware flow control disabled (RTS and CTS signals) */
-//	UartHandle.Instance        = USART1;
-//
-//	UartHandle.Init.BaudRate     = 9600;
-//	UartHandle.Init.WordLength   = UART_WORDLENGTH_8B;
-//	UartHandle.Init.StopBits     = UART_STOPBITS_1;
-//	UartHandle.Init.Parity       = UART_PARITY_NONE;
-//	UartHandle.Init.HwFlowCtl    = UART_HWCONTROL_NONE;
-//	UartHandle.Init.Mode         = UART_MODE_TX_RX;
-//	UartHandle.Init.OverSampling = UART_OVERSAMPLING_16;
-
-//	if(HAL_UART_DeInit(&huart1) != HAL_OK)
-//	{
-//	  Error_Handler();
-//	}
-//	if(HAL_UART_Init(&huart1) != HAL_OK)
-//	{
-//	  Error_Handler();
-//	}
-
-//	//NMEA library example
-//	uint8_t got_one = 0;
-//	nmea_init(&gps, USART1, 1024);
-//	while(~got_one)
-//	{
-//		uint8_t time_h;
-//		printf("Starting Receive\n");
-//		nmea_loop(&gps);
-//	    if (nmea_available(&gps))
-//	    {
-//	      nmea_gnss_time_h(&gps, &time_h);
-//	      nmea_available_reset(&gps);
-//	      got_one = 1;
-//	    }
-//	}
 
 
-	for(int i = 0; i < RXBUFFERSIZE; i++){
-		printf("%d",aRxBuffer[i]);
-	}
-	int end_flag = 0;
-	int uart_counter = 0;
-	while(~end_flag){
-		//Receive one byte at a time until we reach carriage return (end of NMEA message)
-		if(HAL_UART_Receive(&huart1, (uint8_t *)(aRxBuffer+uart_counter), 1, 0x1FFFFFF) != HAL_OK)
-		{
-		Error_Handler();
-		}
-		if(aRxBuffer[uart_counter++] == 13){//Found carriage return, exit
-			end_flag = 1;
-		}
-	}
-
-//	/*##-2- Put UART peripheral in reception process ###########################*/
-//	if(HAL_UART_Receive(&UartHandle, (uint8_t *)aRxBuffer, RXBUFFERSIZE, 0x1FFFFFF) != HAL_OK)
-//	{
-//	Error_Handler();
-//	}
-//	printf("Done Receive\n");
-//
-//	for(int i = 0; i < RXBUFFERSIZE; i++){
-//		printf("%d",aRxBuffer[i]);
-//	}
 
 
-//	/*##-3- Start the transmission process #####################################*/
-//	/* While the UART in reception process, user can transmit data through
-//	 "aTxBuffer" buffer */
-//	if(HAL_UART_Transmit(&UartHandle, (uint8_t*)aTxBuffer, TXBUFFERSIZE, 5000)!= HAL_OK)
-//	{
-//	Error_Handler();
-//	}
-//
-//	/*##-4- Compare the sent and received buffers ##############################*/
-//	if(Buffercmp((uint8_t*)aTxBuffer,(uint8_t*)aRxBuffer,RXBUFFERSIZE))
-//	{
-//	Error_Handler();
-//	}
 
 	/* Turn on LED3 if test passes then enter infinite loop */
 //	BSP_LED_On(LED3);
   /* USER CODE END 2 */
 
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  xQueueSerialDataReceived = xQueueCreate( 2, sizeof( SerialBuffer) );
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* definition and creation of defaultTask */
+  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
+  defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
@@ -305,6 +261,39 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void USART_GPS_IRQHandler(void) // Sync and Queue NMEA Sentences
+{
+	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+	static char rx_buffer[LINEMAX + 1]; // Local holding buffer to build line, w/NUL
+	static int rx_index = 0;
+	if (USART_GPS->ISR & USART_ISR_ORE) // Overrun Error
+		USART_GPS->ICR = USART_ICR_ORECF;
+	if (USART_GPS->ISR & USART_ISR_NE) // Noise Error
+		USART_GPS->ICR = USART_ICR_NCF;
+	if (USART_GPS->ISR & USART_ISR_FE) // Framing Error
+		USART_GPS->ICR = USART_ICR_FECF;
+	if (USART_GPS->ISR & USART_ISR_RXNE) // Received character?
+	{
+		char rx = (char)(USART_GPS->RDR & 0xFF);
+		if ((rx == '\r') || (rx == '\n')) // Is this an end-of-line condition, either will suffice?
+		{
+			if (rx_index != 0) // Line has some content?
+			{
+				rx_buffer[rx_index++] = 0; // Add NUL if required down stream
+				//QueueBuffer(rx_buffer, rx_index); // Copy to queue from live dynamic receive buffer
+				xQueueSendFromISR(xQueueSerialDataReceived,(void *)&rx_buffer,&xHigherPriorityTaskWoken);
+				rx_index = 0; // Reset content pointer
+				got_nmea = 1;
+			}
+		}
+		else
+		{
+			if ((rx == '$') || (rx_index == LINEMAX)) // If resync or overflows pull back to start
+				rx_index = 0;
+			rx_buffer[rx_index++] = rx; // Copy to buffer and increment
+		}
+	}
+}
 
 /**
   * @brief  UART error callbacks
@@ -353,6 +342,55 @@ static uint16_t Buffercmp(uint8_t* pBuffer1, uint8_t* pBuffer2, uint16_t BufferL
   return 0;
 }
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_StartDefaultTask */
+/**
+  * @brief  Function implementing the defaultTask thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartDefaultTask */
+void StartDefaultTask(void const * argument)
+{
+  /* USER CODE BEGIN 5 */
+	SerialBuffer SerialBufferReceived;
+
+  /* Infinite loop */
+  for(;;)
+  {
+	  if(uxQueueMessagesWaitingFromISR(xQueueSerialDataReceived)>0)
+	  {
+	      xQueueReceive(xQueueSerialDataReceived,&(SerialBufferReceived),1);
+	      got_nmea=0;
+	  }
+//	  if(got_nmea){
+//		  got_nmea=0;
+//	  }
+    //osDelay(1);
+  }
+  /* USER CODE END 5 */
+}
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM1 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  /* USER CODE BEGIN Callback 0 */
+
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM1) {
+    HAL_IncTick();
+  }
+  /* USER CODE BEGIN Callback 1 */
+
+  /* USER CODE END Callback 1 */
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.

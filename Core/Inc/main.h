@@ -36,7 +36,10 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-
+typedef struct
+{
+    char Buffer[100];
+} SerialBuffer;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -70,6 +73,22 @@ extern "C" {
 #define PROCESS_RX_BUFFER_SIZE 600
 #define PROCESS_PARSER_BUFFER_SIZE 600
 static char current_parser_buf[ PROCESS_PARSER_BUFFER_SIZE ];
+
+#define USART_GPS USART1//LPUART1
+#define USART_GPS_IRQn USART1_IRQn//LPUART1_IRQn
+#define USART_GPS_IRQHandler USART1_IRQHandler//LPUART1_IRQHandler
+
+#ifdef USART_CR1_TXEIE_TXFNFIE // FIFO Support (L4R9)
+#define USART_CR1_TXEIE USART_CR1_TXEIE_TXFNFIE
+#define USART_ISR_TXE USART_ISR_TXE_TXFNF
+#define USART_CR1_RXNEIE USART_CR1_RXNEIE_RXFNEIE
+#define USART_ISR_RXNE USART_ISR_RXNE_RXFNE
+#endif
+
+#define LINEMAX 100 // Maximal allowed/expected line length
+static char rx_buffer[LINEMAX + 1]; // Local holding buffer to build line, w/NUL
+static int rx_index = 0;
+static char got_nmea = 0;
 
 
 /* USER CODE END EC */
