@@ -115,7 +115,7 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART1_UART_Init();
-  HAL_NVIC_SetPriority(USART_GPS_IRQn, 1, 0);
+  HAL_NVIC_SetPriority(USART_GPS_IRQn, 5, 5);
   HAL_NVIC_EnableIRQ(USART_GPS_IRQn);
   USART_GPS->CR1 |= USART_CR1_RXNEIE; // Enable Interrupt
   /* USER CODE BEGIN 2 */
@@ -361,6 +361,7 @@ void StartDefaultTask(void const * argument)
 	  if(uxQueueMessagesWaitingFromISR(xQueueSerialDataReceived)>0)
 	  {
 	      xQueueReceive(xQueueSerialDataReceived,&(SerialBufferReceived),1);
+
 	      got_nmea=0;
 	  }
 //	  if(got_nmea){

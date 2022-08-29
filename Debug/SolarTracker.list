@@ -419,9 +419,9 @@ int main(void)
  8000516:	f000 f8ab 	bl	8000670 <MX_GPIO_Init>
   MX_USART1_UART_Init();
  800051a:	f000 f879 	bl	8000610 <MX_USART1_UART_Init>
-  HAL_NVIC_SetPriority(USART_GPS_IRQn, 1, 0);
- 800051e:	2200      	movs	r2, #0
- 8000520:	2101      	movs	r1, #1
+  HAL_NVIC_SetPriority(USART_GPS_IRQn, 5, 5);
+ 800051e:	2205      	movs	r2, #5
+ 8000520:	2105      	movs	r1, #5
  8000522:	2025      	movs	r0, #37	; 0x25
  8000524:	f000 fb7e 	bl	8000c24 <HAL_NVIC_SetPriority>
   HAL_NVIC_EnableIRQ(USART_GPS_IRQn);
