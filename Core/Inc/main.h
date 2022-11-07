@@ -85,10 +85,22 @@ static char current_parser_buf[ PROCESS_PARSER_BUFFER_SIZE ];
 #define USART_ISR_RXNE USART_ISR_RXNE_RXFNE
 #endif
 
+
 #define LINEMAX 100 // Maximal allowed/expected line length
 static char rx_buffer[LINEMAX + 1]; // Local holding buffer to build line, w/NUL
 static int rx_index = 0;
 static char got_nmea = 0;
+
+static SemaphoreHandle_t spi_sem;     // Used to signal SPI task to write nmea
+static SemaphoreHandle_t uart_sem;     // Used to signal UART task to fill nmea buffer
+SerialBuffer SerialBufferReceived;
+
+#define SPI_BUF_SIZE 100
+static char spi_mout_buf[SPI_BUF_SIZE];
+static char spi_min_buf[SPI_BUF_SIZE];
+static uint8_t spi_addr;
+static uint8_t spi_wip;
+
 
 
 /* USER CODE END EC */

@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "nmea.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,9 +47,21 @@
 UART_HandleTypeDef huart1;
 
 osThreadId defaultTaskHandle;
+
+osThreadId spiTaskHandle;
 /* USER CODE BEGIN PV */
-/* UART handler declaration */
-UART_HandleTypeDef UartHandle;
+
+// FM25V02A FRAM SPI Commands
+const uint8_t READ = 0b00000011;
+const uint8_t WRITE = 0b00000010;
+const uint8_t WREN = 0b00000110;
+const uint8_t RDSR = 0b00000101;
+const uint8_t WRSR = 0b00000001;
+const uint8_t FSTRD = 0b00001011;
+const uint8_t SLEEP = 0b10111001;
+const uint8_t RDID = 0b10011111;
+
+
 __IO uint32_t VirtualUserButtonStatus = 0;  /* set to 1 after User set a button  */
 
 /* Buffer used for transmission */
@@ -121,10 +134,6 @@ int main(void)
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
 
-
-
-
-
 	/* Turn on LED3 if test passes then enter infinite loop */
 //	BSP_LED_On(LED3);
   /* USER CODE END 2 */
@@ -135,6 +144,8 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
+  spi_sem = xSemaphoreCreateBinary();
+  uart_sem = xSemaphoreCreateBinary();
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
@@ -147,8 +158,11 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of defaultTask */
-  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
+  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 512);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+
+  osThreadDef(spiTask, StartSpiTask, osPriorityNormal, 0, 512);
+  spiTaskHandle = osThreadCreate(osThread(spiTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -405,25 +419,54 @@ static uint16_t Buffercmp(uint8_t* pBuffer1, uint8_t* pBuffer2, uint16_t BufferL
 void StartDefaultTask(void const * argument)
 {
   /* USER CODE BEGIN 5 */
-	SerialBuffer SerialBufferReceived;
+	static uint8_t valid_count = 0;
 
   /* Infinite loop */
   for(;;)
   {
 	  if(uxQueueMessagesWaitingFromISR(xQueueSerialDataReceived)>0)
 	  {
-	      xQueueReceive(xQueueSerialDataReceived,&(SerialBufferReceived),1);
+		  if(valid_count == 0) xSemaphoreTake(uart_sem, portMAX_DELAY); //Grab semaphore for new message
 
+	      xQueueReceive(xQueueSerialDataReceived,&(SerialBufferReceived),1);
+	      valid_count++;
 	      if(SerialBufferReceived.Buffer[18] == 'A'){
 	    	  //Got a fix
-	    	  got_nmea = 0;
-	    	  //Post SPI write semaphore when received full message
+	    	  if(valid_count >= ){ //Length of NMEA message
+		    	  valid_count = 0;
+		    	  //Post SPI write semaphore when received full valid message
+		    	  xSemaphoreGive(spi_sem);
+	    	  }
 	      }
 	      got_nmea=0;
 	  }
     //osDelay(1);
   }
   /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_StartSPITask */
+/**
+  * @brief  Function implementing the spiTask thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartSPITask */
+void StartSPITask(void const * argument)
+{
+  /* USER CODE BEGIN 6 */
+
+  /* Infinite loop */
+  for(;;)
+  {
+	  xSemaphoreTake(spi_sem, portMAX_DELAY); //Wait for nmea sem to be posted
+	  osDelay(1);
+	  //Send over SPI to FRAM
+	  xSemaphoreGive(uart_sem); //Tell UART to gather more data
+
+
+  }
+  /* USER CODE END 6 */
 }
 
 /**
