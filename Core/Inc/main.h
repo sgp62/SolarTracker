@@ -90,6 +90,7 @@ static char current_parser_buf[ PROCESS_PARSER_BUFFER_SIZE ];
 static char rx_buffer[LINEMAX + 1]; // Local holding buffer to build line, w/NUL
 static int rx_index = 0;
 static char got_nmea = 0;
+static char nmea_header[6];
 
 
 

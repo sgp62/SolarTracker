@@ -24,6 +24,7 @@
 /* USER CODE BEGIN Includes */
 #include "nmea.h"
 #include <stdio.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -136,11 +137,42 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   MX_SPI1_Init();
+
   /* USER CODE BEGIN 2 */
   //Enable Uart Interrupts
   HAL_NVIC_SetPriority(USART_GPS_IRQn, 7, 6);
   HAL_NVIC_EnableIRQ(USART_GPS_IRQn);
   USART_GPS->CR1 |= USART_CR1_RXNEIE; // Enable Interrupt
+
+  //SPI Initialization **************************
+  //Write CS Pin high
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+
+  // Enable write enable latch (allow write operations)
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+  HAL_SPI_Transmit(&hspi1, (uint8_t *)&WREN, 1, 100);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+
+  // Test bytes to write to EEPROM
+  spi_mout_buf[0] = 0xAB;
+  spi_mout_buf[1] = 0xCD;
+  spi_mout_buf[2] = 0xEF;
+
+  // Set starting address
+  addr = 0x05;
+
+  // Write 3 bytes starting at given address
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+  HAL_SPI_Transmit(&hspi1, (uint8_t *)&WRITE, 1, 100);
+  HAL_SPI_Transmit(&hspi1, (uint8_t *)&addr, 1, 100);
+  HAL_SPI_Transmit(&hspi1, (uint8_t *)spi_mout_buf, 3, 100);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+
+  // Clear buffer
+  spi_buf[0] = 0;
+  spi_buf[1] = 0;
+  spi_buf[2] = 0;
+
 	/* Turn on LED3 if test passes then enter infinite loop */
 //	BSP_LED_On(LED3);
   /* USER CODE END 2 */
@@ -160,6 +192,8 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
+  //Post UART sem for initial GPS read
+  //xSemaphoreGive(UART_semHandle);
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
@@ -176,8 +210,8 @@ int main(void)
   uartTaskHandle = osThreadCreate(osThread(uartTask), NULL);
 
   /* definition and creation of spiTask */
-//  osThreadDef(spiTask, spiTaskFunc, osPriorityNormal, 0, 512);
-//  spiTaskHandle = osThreadCreate(osThread(spiTask), NULL);
+  osThreadDef(spiTask, spiTaskFunc, osPriorityNormal, 0, 512);
+  spiTaskHandle = osThreadCreate(osThread(spiTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -441,21 +475,27 @@ void uartTaskFunc(void const * argument)
   {
 	  if(uxQueueMessagesWaitingFromISR(xQueueSerialDataReceived)>0)
 	  {
-//		  if(valid_count == 0) {
-//			  //osSemaphoreAcquire(UART_semHandle, osWaitForever); //Grab semaphore for new message
-//			  xSemaphoreTake(UART_semHandle, portMAX_DELAY);
-//		  }
+		  if(valid_count == 0) {
+			  //osSemaphoreAcquire(UART_semHandle, osWaitForever); //Grab semaphore for new message
+			  xSemaphoreTake(UART_semHandle, portMAX_DELAY);
+		  }
 
 	      xQueueReceive(xQueueSerialDataReceived,&(SerialBufferReceived),1);
 	      valid_count++;
-	      if(SerialBufferReceived.Buffer[18] == 'A'){
-	    	  //Got a fix0000
-	    	  if(valid_count >= 47){ //Length of NMEA message
-		    	  valid_count = 0;
-		    	  //Post SPI write semaphore when received full valid message
-		    	  //osSemaphoreRelease(SPI_semHandle);
-		    	  xSemaphoreGive(SPI_semHandle);
-	    	  }
+	      //Fill and check header
+	      for(int c = 0; c < 6; c++){
+	    	  nmea_header[c] = SerialBufferReceived.Buffer[c];
+	      }
+	      if(!strcmp(nmea_header, "$GPRMC")){
+		      if(SerialBufferReceived.Buffer[18] == 'A'){
+		    	  //Got a fix0000
+		    	  if(valid_count >= 47){ //Length of NMEA message
+			    	  valid_count = 0;
+			    	  //Post SPI write semaphore when received full valid message
+			    	  //osSemaphoreRelease(SPI_semHandle);
+			    	  xSemaphoreGive(SPI_semHandle);
+		    	  }
+		      }
 	      }
 	      got_nmea=0;
 	  }
@@ -481,6 +521,7 @@ void spiTaskFunc(void const * argument)
 	  xSemaphoreTake(SPI_semHandle, portMAX_DELAY);
 	  osDelay(1);
 	  //Send over SPI to FRAM
+
 	  //osSemaphoreRelease(UART_semHandle); //Tell UART to gather more data
 	  xSemaphoreGive(UART_semHandle);
 
