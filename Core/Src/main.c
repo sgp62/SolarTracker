@@ -46,9 +46,10 @@
 
 UART_HandleTypeDef huart1;
 
-osThreadId defaultTaskHandle;
-
+osThreadId uartTaskHandle;
 osThreadId spiTaskHandle;
+osSemaphoreId SPI_semHandle;
+osSemaphoreId UART_semHandle;
 /* USER CODE BEGIN PV */
 
 // FM25V02A FRAM SPI Commands
@@ -69,6 +70,8 @@ uint8_t aTxBuffer[] = " **** UART_TwoBoards_ComPolling ****  **** UART_TwoBoards
 
 /* Buffer used for reception */
 uint8_t aRxBuffer[PROCESS_RX_BUFFER_SIZE];
+
+SerialBuffer SerialBufferReceived;
 
 /*
 Notes :
@@ -91,7 +94,8 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_SPI1_Init(void);
-void StartDefaultTask(void const * argument);
+void uartTaskFunc(void const * argument);
+void spiTaskFunc(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -133,7 +137,10 @@ int main(void)
   MX_USART1_UART_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-
+  //Enable Uart Interrupts
+  HAL_NVIC_SetPriority(USART_GPS_IRQn, 7, 6);
+  HAL_NVIC_EnableIRQ(USART_GPS_IRQn);
+  USART_GPS->CR1 |= USART_CR1_RXNEIE; // Enable Interrupt
 	/* Turn on LED3 if test passes then enter infinite loop */
 //	BSP_LED_On(LED3);
   /* USER CODE END 2 */
@@ -142,10 +149,17 @@ int main(void)
   /* add mutexes, ... */
   /* USER CODE END RTOS_MUTEX */
 
+  /* Create the semaphores(s) */
+  /* definition and creation of SPI_sem */
+  osSemaphoreDef(SPI_sem);
+  SPI_semHandle = osSemaphoreCreate(osSemaphore(SPI_sem), 1);
+
+  /* definition and creation of UART_sem */
+  osSemaphoreDef(UART_sem);
+  UART_semHandle = osSemaphoreCreate(osSemaphore(UART_sem), 1);
+
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
-  spi_sem = xSemaphoreCreateBinary();
-  uart_sem = xSemaphoreCreateBinary();
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
@@ -157,12 +171,13 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* definition and creation of defaultTask */
-  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 512);
-  defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+  /* definition and creation of uartTask */
+  osThreadDef(uartTask, uartTaskFunc, osPriorityNormal, 0, 512);
+  uartTaskHandle = osThreadCreate(osThread(uartTask), NULL);
 
-  osThreadDef(spiTask, StartSpiTask, osPriorityNormal, 0, 512);
-  spiTaskHandle = osThreadCreate(osThread(spiTask), NULL);
+  /* definition and creation of spiTask */
+//  osThreadDef(spiTask, spiTaskFunc, osPriorityNormal, 0, 512);
+//  spiTaskHandle = osThreadCreate(osThread(spiTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -409,14 +424,14 @@ static uint16_t Buffercmp(uint8_t* pBuffer1, uint8_t* pBuffer2, uint16_t BufferL
 }
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartDefaultTask */
+/* USER CODE BEGIN Header_uartTaskFunc */
 /**
-  * @brief  Function implementing the defaultTask thread.
+  * @brief  Function implementing the uartTask thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void const * argument)
+/* USER CODE END Header_uartTaskFunc */
+void uartTaskFunc(void const * argument)
 {
   /* USER CODE BEGIN 5 */
 	static uint8_t valid_count = 0;
@@ -426,16 +441,20 @@ void StartDefaultTask(void const * argument)
   {
 	  if(uxQueueMessagesWaitingFromISR(xQueueSerialDataReceived)>0)
 	  {
-		  if(valid_count == 0) xSemaphoreTake(uart_sem, portMAX_DELAY); //Grab semaphore for new message
+//		  if(valid_count == 0) {
+//			  //osSemaphoreAcquire(UART_semHandle, osWaitForever); //Grab semaphore for new message
+//			  xSemaphoreTake(UART_semHandle, portMAX_DELAY);
+//		  }
 
 	      xQueueReceive(xQueueSerialDataReceived,&(SerialBufferReceived),1);
 	      valid_count++;
 	      if(SerialBufferReceived.Buffer[18] == 'A'){
-	    	  //Got a fix
-	    	  if(valid_count >= ){ //Length of NMEA message
+	    	  //Got a fix0000
+	    	  if(valid_count >= 47){ //Length of NMEA message
 		    	  valid_count = 0;
 		    	  //Post SPI write semaphore when received full valid message
-		    	  xSemaphoreGive(spi_sem);
+		    	  //osSemaphoreRelease(SPI_semHandle);
+		    	  xSemaphoreGive(SPI_semHandle);
 	    	  }
 	      }
 	      got_nmea=0;
@@ -445,28 +464,28 @@ void StartDefaultTask(void const * argument)
   /* USER CODE END 5 */
 }
 
-/* USER CODE BEGIN Header_StartSPITask */
+/* USER CODE BEGIN Header_spiTaskFunc */
 /**
-  * @brief  Function implementing the spiTask thread.
-  * @param  argument: Not used
-  * @retval None
-  */
-/* USER CODE END Header_StartSPITask */
-void StartSPITask(void const * argument)
+* @brief Function implementing the spiTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_spiTaskFunc */
+void spiTaskFunc(void const * argument)
 {
-  /* USER CODE BEGIN 6 */
-
+  /* USER CODE BEGIN spiTaskFunc */
   /* Infinite loop */
   for(;;)
   {
-	  xSemaphoreTake(spi_sem, portMAX_DELAY); //Wait for nmea sem to be posted
+	  //osStatus stat = osSemaphoreAcquire(SPI_semHandle, osWaitForever); //Wait for nmea sem to be posted
+	  xSemaphoreTake(SPI_semHandle, portMAX_DELAY);
 	  osDelay(1);
 	  //Send over SPI to FRAM
-	  xSemaphoreGive(uart_sem); //Tell UART to gather more data
-
+	  //osSemaphoreRelease(UART_semHandle); //Tell UART to gather more data
+	  xSemaphoreGive(UART_semHandle);
 
   }
-  /* USER CODE END 6 */
+  /* USER CODE END spiTaskFunc */
 }
 
 /**

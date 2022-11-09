@@ -1,7 +1,9 @@
 #MicroXplorer Configuration settings - do not modify
-FREERTOS.FootprintOK=false
-FREERTOS.IPParameters=Tasks01,configUSE_NEWLIB_REENTRANT,FootprintOK
+FREERTOS.BinarySemaphores01=SPI_sem,Dynamic,NULL;UART_sem,Dynamic,NULL
+FREERTOS.IPParameters=Tasks01,configUSE_NEWLIB_REENTRANT,configTOTAL_HEAP_SIZE,BinarySemaphores01,configUSE_COUNTING_SEMAPHORES
 FREERTOS.Tasks01=uartTask,0,512,uartTaskFunc,Default,NULL,Dynamic,NULL,NULL;spiTask,0,512,spiTaskFunc,Default,NULL,Dynamic,NULL,NULL
+FREERTOS.configTOTAL_HEAP_SIZE=10000
+FREERTOS.configUSE_COUNTING_SEMAPHORES=1
 FREERTOS.configUSE_NEWLIB_REENTRANT=1
 File.Version=6
 KeepUserPlacement=false
@@ -87,7 +89,7 @@ ProjectManager.StackSize=0x400
 ProjectManager.TargetToolchain=STM32CubeIDE
 ProjectManager.ToolChainLocation=
 ProjectManager.UnderRoot=true
-ProjectManager.functionlistsort=1-SystemClock_Config-RCC-false-HAL-false,2-MX_GPIO_Init-GPIO-false-HAL-true,3-MX_USART1_UART_Init-USART1-false-HAL-true
+ProjectManager.functionlistsort=1-SystemClock_Config-RCC-false-HAL-false,2-MX_GPIO_Init-GPIO-false-HAL-true,3-MX_USART1_UART_Init-USART1-false-HAL-true,4-MX_SPI1_Init-SPI1-false-HAL-true
 RCC.FamilyName=M
 RCC.HSE_VALUE=8000000
 RCC.HSI48_VALUE=48000000
