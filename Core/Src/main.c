@@ -153,26 +153,55 @@ int main(void)
   HAL_SPI_Transmit(&hspi1, (uint8_t *)&WREN, 1, 100);
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 
-  // Test bytes to write to EEPROM
-  spi_mout_buf[0] = 0xAB;
-  spi_mout_buf[1] = 0xCD;
-  spi_mout_buf[2] = 0xEF;
+  //while(1){
 
-  // Set starting address
-  addr = 0x05;
+	  // Test bytes to write to EEPROM
+	  spi_mout_buf[0] = 0xAB;
+	  spi_mout_buf[1] = 0xCD;
+	  spi_mout_buf[2] = 0xEF;
 
-  // Write 3 bytes starting at given address
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-  HAL_SPI_Transmit(&hspi1, (uint8_t *)&WRITE, 1, 100);
-  HAL_SPI_Transmit(&hspi1, (uint8_t *)&addr, 1, 100);
-  HAL_SPI_Transmit(&hspi1, (uint8_t *)spi_mout_buf, 3, 100);
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+	  // Set starting address
+	  spi_addr = 0x05;
 
-  // Clear buffer
-  spi_buf[0] = 0;
-  spi_buf[1] = 0;
-  spi_buf[2] = 0;
+	  // Write 3 bytes starting at given address
+	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	  HAL_SPI_Transmit(&hspi1, (uint8_t *)&WRITE, 1, 100);
+	  HAL_SPI_Transmit(&hspi1, (uint8_t *)&spi_addr, 1, 100);
+	  HAL_SPI_Transmit(&hspi1, (uint8_t *)spi_mout_buf, 3, 100);
+	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 
+	  // Clear buffer
+	  spi_mout_buf[0] = 0;
+	  spi_mout_buf[1] = 0;
+	  spi_mout_buf[2] = 0;
+
+	  // Wait until WIP bit is cleared
+	   spi_wip = 1;
+	   while (spi_wip)
+	   {
+		 // Read status register
+		 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+		 HAL_SPI_Transmit(&hspi1, (uint8_t *)&RDSR, 1, 100);
+		 HAL_SPI_Receive(&hspi1, (uint8_t *)spi_mout_buf, 1, 100);
+		 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+
+		 // Mask out WIP bit
+		 spi_wip = spi_mout_buf[0] & 0b00000001;
+	   }
+
+	   // Read the 3 bytes back
+	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	   HAL_SPI_Transmit(&hspi1, (uint8_t *)&READ, 1, 100);
+	   HAL_SPI_Transmit(&hspi1, (uint8_t *)&spi_addr, 1, 100);
+	   HAL_SPI_Receive(&hspi1, (uint8_t *)spi_mout_buf, 3, 100);
+	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+
+	   // Read status register
+	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	   HAL_SPI_Transmit(&hspi1, (uint8_t *)&RDSR, 1, 100);
+	   HAL_SPI_Receive(&hspi1, (uint8_t *)spi_mout_buf, 1, 100);
+	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+  //}
 	/* Turn on LED3 if test passes then enter infinite loop */
 //	BSP_LED_On(LED3);
   /* USER CODE END 2 */
@@ -311,7 +340,7 @@ static void MX_SPI1_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN SPI1_Init 2 */
-
+  SPI1->CR1 |= SPI_CR1_SSI;
   /* USER CODE END SPI1_Init 2 */
 
 }
