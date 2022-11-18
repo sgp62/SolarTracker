@@ -137,70 +137,12 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   MX_SPI1_Init();
-
   /* USER CODE BEGIN 2 */
   //Enable Uart Interrupts
   HAL_NVIC_SetPriority(USART_GPS_IRQn, 7, 6);
   HAL_NVIC_EnableIRQ(USART_GPS_IRQn);
   USART_GPS->CR1 |= USART_CR1_RXNEIE; // Enable Interrupt
 
-  //SPI Initialization **************************
-  //Write CS Pin high
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
-
-  // Enable write enable latch (allow write operations)
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-  HAL_SPI_Transmit(&hspi1, (uint8_t *)&WREN, 1, 100);
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
-
-  //while(1){
-
-	  // Test bytes to write to EEPROM
-	  spi_mout_buf[0] = 0xAB;
-	  spi_mout_buf[1] = 0xCD;
-	  spi_mout_buf[2] = 0xEF;
-
-	  // Set starting address
-	  spi_addr = 0x05;
-
-	  // Write 3 bytes starting at given address
-	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-	  HAL_SPI_Transmit(&hspi1, (uint8_t *)&WRITE, 1, 100);
-	  HAL_SPI_Transmit(&hspi1, (uint8_t *)&spi_addr, 1, 100);
-	  HAL_SPI_Transmit(&hspi1, (uint8_t *)spi_mout_buf, 3, 100);
-	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
-
-	  // Clear buffer
-	  spi_mout_buf[0] = 0;
-	  spi_mout_buf[1] = 0;
-	  spi_mout_buf[2] = 0;
-
-	  // Wait until WIP bit is cleared
-	   spi_wip = 1;
-	   while (spi_wip)
-	   {
-		 // Read status register
-		 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-		 HAL_SPI_Transmit(&hspi1, (uint8_t *)&RDSR, 1, 100);
-		 HAL_SPI_Receive(&hspi1, (uint8_t *)spi_mout_buf, 1, 100);
-		 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
-
-		 // Mask out WIP bit
-		 spi_wip = spi_mout_buf[0] & 0b00000001;
-	   }
-
-	   // Read the 3 bytes back
-	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-	   HAL_SPI_Transmit(&hspi1, (uint8_t *)&READ, 1, 100);
-	   HAL_SPI_Transmit(&hspi1, (uint8_t *)&spi_addr, 1, 100);
-	   HAL_SPI_Receive(&hspi1, (uint8_t *)spi_mout_buf, 3, 100);
-	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
-
-	   // Read status register
-	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-	   HAL_SPI_Transmit(&hspi1, (uint8_t *)&RDSR, 1, 100);
-	   HAL_SPI_Receive(&hspi1, (uint8_t *)spi_mout_buf, 1, 100);
-	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
   //}
 	/* Turn on LED3 if test passes then enter infinite loop */
 //	BSP_LED_On(LED3);
@@ -239,7 +181,7 @@ int main(void)
   uartTaskHandle = osThreadCreate(osThread(uartTask), NULL);
 
   /* definition and creation of spiTask */
-  osThreadDef(spiTask, spiTaskFunc, osPriorityNormal, 0, 512);
+  osThreadDef(spiTask, spiTaskFunc, osPriorityHigh, 0, 512);
   spiTaskHandle = osThreadCreate(osThread(spiTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -314,7 +256,12 @@ static void MX_SPI1_Init(void)
 {
 
   /* USER CODE BEGIN SPI1_Init 0 */
-
+	GPIO_InitTypeDef GPIO_InitStruct;
+	//__HAL_RCC_GPIOA_CLK_ENABLE();
+	/* SPI MOSI GPIO pin configuration  */
+	  GPIO_InitStruct.Pin = GPIO_PIN_7;
+	  GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
+	  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
   /* USER CODE END SPI1_Init 0 */
 
   /* USER CODE BEGIN SPI1_Init 1 */
@@ -328,7 +275,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_128;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -340,7 +287,7 @@ static void MX_SPI1_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN SPI1_Init 2 */
-  SPI1->CR1 |= SPI_CR1_SSI;
+  SPI1->CR1 |= SPI_CR1_SSM;
   /* USER CODE END SPI1_Init 2 */
 
 }
@@ -543,6 +490,7 @@ void uartTaskFunc(void const * argument)
 void spiTaskFunc(void const * argument)
 {
   /* USER CODE BEGIN spiTaskFunc */
+	HAL_StatusTypeDef response = HAL_ERROR;
   /* Infinite loop */
   for(;;)
   {
@@ -550,7 +498,67 @@ void spiTaskFunc(void const * argument)
 	  xSemaphoreTake(SPI_semHandle, portMAX_DELAY);
 	  osDelay(1);
 	  //Send over SPI to FRAM
+	  //SPI Initialization **************************
+	  //Write CS Pin high
+	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 
+	  // Enable write enable latch (allow write operations)
+	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	  HAL_SPI_Transmit(&hspi1, (uint8_t *)&WREN, 1, 100);
+	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+
+	  // Test bytes to write to EEPROM
+	  spi_mout_buf[0] = 0xAB;
+	  spi_mout_buf[1] = 0xCD;
+	  spi_mout_buf[2] = 0xEF;
+
+	  // Set starting address
+	  spi_addr = 0x00;
+
+	  // Write 3 bytes starting at given address
+	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	  HAL_SPI_Transmit(&hspi1, (uint8_t *)&WRITE, 1, 100);
+	  HAL_SPI_Transmit(&hspi1, (uint8_t *)&spi_addr, 2, 100);
+	  HAL_SPI_Transmit(&hspi1, (uint8_t *)spi_mout_buf, 3, 100);
+	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+	  //IO Driver for output pin enable
+
+	  // Clear buffer
+	  spi_mout_buf[0] = 0;
+	  spi_mout_buf[1] = 0;
+	  spi_mout_buf[2] = 0;
+
+	  // Wait until WIP bit is cleared
+	   spi_wip = 1;
+	   while (spi_wip)
+	   {
+		 // Read status register
+		 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+		 HAL_SPI_Transmit(&hspi1, (uint8_t *)&RDSR, 1, 100);
+		 response = HAL_SPI_Receive(&hspi1, (uint8_t *)spi_mout_buf, 1, 100);
+		 if (response == HAL_OK) {
+		  printf("Status Reg: %02x \r\n", spi_mout_buf[0]);
+		 } else {
+		  printf("Got error response as %d\r\n", response);
+		 }
+		 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+
+		 // Mask out WIP bit
+		 spi_wip = spi_mout_buf[0] & 0b00000001;
+	   }
+
+	   // Read the 3 bytes back
+	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	   HAL_SPI_Transmit(&hspi1, (uint8_t *)&READ, 1, 5);
+	   HAL_SPI_Transmit(&hspi1, (uint8_t *)&spi_addr, 2, 5);
+	   HAL_SPI_Receive(&hspi1, (uint8_t *)spi_mout_buf, 3, 5);
+	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+
+	   // Read status register
+	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+	   HAL_SPI_Transmit(&hspi1, (uint8_t *)&RDSR, 1, 100);
+	   HAL_SPI_Receive(&hspi1, (uint8_t *)spi_mout_buf, 1, 100);
+	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 	  //osSemaphoreRelease(UART_semHandle); //Tell UART to gather more data
 	  xSemaphoreGive(UART_semHandle);
 

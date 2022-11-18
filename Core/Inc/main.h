@@ -95,9 +95,9 @@ static char nmea_header[6];
 
 
 #define SPI_BUF_SIZE 100
-static char spi_mout_buf[SPI_BUF_SIZE];
-static char spi_min_buf[SPI_BUF_SIZE];
-static uint8_t spi_addr;
+static uint8_t spi_mout_buf[SPI_BUF_SIZE];
+static uint8_t spi_min_buf[SPI_BUF_SIZE];
+static uint16_t spi_addr;
 static uint8_t spi_wip;
 
 
