@@ -48,6 +48,8 @@
 
 /* Private variables ---------------------------------------------------------*/
  SPI_HandleTypeDef hspi3;
+DMA_HandleTypeDef hdma_spi3_rx;
+DMA_HandleTypeDef hdma_spi3_tx;
 
 UART_HandleTypeDef huart1;
 
@@ -98,6 +100,7 @@ static uint16_t Buffercmp(uint8_t* pBuffer1, uint8_t* pBuffer2, uint16_t BufferL
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_DMA_Init(void);
 static void MX_SPI3_Init(void);
 void uartTaskFunc(void const * argument);
 void spiTaskFunc(void const * argument);
@@ -161,6 +164,7 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART1_UART_Init();
+  MX_DMA_Init();
   MX_SPI3_Init();
   /* USER CODE BEGIN 2 */
   //Enable Uart Interrupts
@@ -301,13 +305,13 @@ static void MX_SPI3_Init(void)
   hspi3.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
   hspi3.Init.CRCPolynomial = 7;
   hspi3.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  hspi3.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  hspi3.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
   if (HAL_SPI_Init(&hspi3) != HAL_OK)
   {
     Error_Handler();
   }
   /* USER CODE BEGIN SPI3_Init 2 */
-  SPI3->CR1 |= SPI_CR1_SSM;
+  //SPI3->CR1 |= SPI_CR1_SSM;
   /* USER CODE END SPI3_Init 2 */
 
 }
@@ -344,6 +348,25 @@ static void MX_USART1_UART_Init(void)
   /* USER CODE BEGIN USART1_Init 2 */
 
   /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA2_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Channel1_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Channel1_IRQn);
+  /* DMA2_Channel2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Channel2_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Channel2_IRQn);
 
 }
 
@@ -500,12 +523,14 @@ void uartTaskFunc(void const * argument)
 				  latitude = GpsToDecimalDegrees(raw_latitude, latdir);
 				  longitude = GpsToDecimalDegrees(raw_longitude, longdir);
 
-				  if(valid_count >= 47){ //Length of NMEA message
-					  valid_count = 0;
-					  //Post SPI write semaphore when received full valid message
-					  //osSemaphoreRelease(SPI_semHandle);
-					  xSemaphoreGive(SPI_semHandle);
-				  }
+				  valid_count = 0;
+				  xSemaphoreGive(SPI_semHandle);
+//				  if(valid_count >= 47){ //Length of NMEA message
+//					  valid_count = 0;
+//					  //Post SPI write semaphore when received full valid message
+//					  //osSemaphoreRelease(SPI_semHandle);
+//
+//				  }
 			  }
 		  }
 		  got_nmea=0;
@@ -536,10 +561,9 @@ void spiTaskFunc(void const * argument)
 	  //SPI Initialization **************************
 	  //Write CS Pin high
 	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
-
 	  // Enable write enable latch (allow write operations)
 	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-	  HAL_SPI_Transmit(&hspi3, (uint8_t *)&WREN, 1, 100);
+	  HAL_SPI_Transmit_DMA(&hspi3, (uint8_t *)&WREN, 1);
 	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 
 	  // Test bytes to write to EEPROM
@@ -552,9 +576,9 @@ void spiTaskFunc(void const * argument)
 
 	  // Write 3 bytes starting at given address
 	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-	  HAL_SPI_Transmit(&hspi3, (uint8_t *)&WRITE, 1, 100);
-	  HAL_SPI_Transmit(&hspi3, (uint8_t *)&spi_addr, 2, 100);
-	  HAL_SPI_Transmit(&hspi3, (uint8_t *)spi_mout_buf, 3, 100);
+	  HAL_SPI_Transmit_DMA(&hspi3, (uint8_t *)&WRITE, 1);
+	  HAL_SPI_Transmit_DMA(&hspi3, (uint8_t *)&spi_addr, 2);
+	  HAL_SPI_Transmit_DMA(&hspi3, (uint8_t *)spi_mout_buf, 3);
 	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 	  //IO Driver for output pin enable
 
@@ -569,8 +593,8 @@ void spiTaskFunc(void const * argument)
 	   {
 		 // Read status register
 		 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-		 HAL_SPI_Transmit(&hspi3, (uint8_t *)&RDSR, 1, 100);
-		 response = HAL_SPI_Receive(&hspi3, (uint8_t *)spi_mout_buf, 1, 100);
+		 HAL_SPI_Transmit_DMA(&hspi3, (uint8_t *)&RDSR, 1);
+		 response = HAL_SPI_Receive_DMA(&hspi3, (uint8_t *)spi_mout_buf, 1);
 		 if (response == HAL_OK) {
 		  printf("Status Reg: %02x \r\n", spi_mout_buf[0]);
 		 } else {
@@ -584,15 +608,15 @@ void spiTaskFunc(void const * argument)
 
 	   // Read the 3 bytes back
 	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-	   HAL_SPI_Transmit(&hspi3, (uint8_t *)&READ, 1, 5);
-	   HAL_SPI_Transmit(&hspi3, (uint8_t *)&spi_addr, 2, 5);
-	   HAL_SPI_Receive(&hspi3, (uint8_t *)spi_mout_buf, 3, 5);
+	   HAL_SPI_Transmit_DMA(&hspi3, (uint8_t *)&READ, 1);
+	   HAL_SPI_Transmit_DMA(&hspi3, (uint8_t *)&spi_addr, 2);
+	   HAL_SPI_Receive_DMA(&hspi3, (uint8_t *)spi_mout_buf, 3);
 	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 
 	   // Read status register
 	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-	   HAL_SPI_Transmit(&hspi3, (uint8_t *)&RDSR, 1, 100);
-	   HAL_SPI_Receive(&hspi3, (uint8_t *)spi_mout_buf, 1, 100);
+	   HAL_SPI_Transmit_DMA(&hspi3, (uint8_t *)&RDSR, 1);
+	   HAL_SPI_Receive_DMA(&hspi3, (uint8_t *)spi_mout_buf, 1);
 	   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 	  //osSemaphoreRelease(UART_semHandle); //Tell UART to gather more data
 	  xSemaphoreGive(UART_semHandle);
